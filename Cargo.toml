@@ -1,9 +1,22 @@
 [package]
-name = "project-name"
+name = "matrix-oracle"
+description = ".well-known resolver for the matrix protocol"
 version = "0.1.0"
-authors = []
+authors = ["Amanda Graven <amanda@graven.dev"]
 edition = "2018"
 resolver = "2"
 publish = ["famedly"]
 
+[features]
+default = ["native-tls"]
+native-tls = ["reqwest/native-tls", "trust-dns-resolver/dns-over-native-tls", "trust-dns-resolver/dnssec-openssl"]
+rustls = ["reqwest/rustls-tls", "trust-dns-resolver/dns-over-rustls", "trust-dns-resolver/dnssec-ring"]
+
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
+trust-dns-resolver = { version = "0.20" }
+
+[dev-dependencies]
+mockito = "0.30"
+tokio = { version = "1.12", features = ["macros"] }

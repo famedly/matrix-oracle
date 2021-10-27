@@ -1,4 +1,5 @@
-//! TODO: crate documentation
+//! Matrix-oracle is a crate for performing lookups of .well-known information
+//! for the matrix protocol.
 
 #![deny(
 	trivial_casts,
@@ -15,7 +16,8 @@
 	clippy::expect_used
 )]
 
-/// Write a hello world message
-pub fn hello_world() {
-	println!("Hello, world!")
-}
+pub use error::{Error, Result};
+
+pub mod client;
+pub mod error;
+pub mod server;
