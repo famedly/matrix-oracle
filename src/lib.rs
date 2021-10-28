@@ -16,8 +16,7 @@
 	clippy::expect_used
 )]
 
-pub use error::{Error, Result};
-
+#[cfg(feature = "client")]
 pub mod client;
-pub mod error;
+#[cfg(feature = "server")]
 pub mod server;

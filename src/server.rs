@@ -5,6 +5,8 @@ use std::net::{IpAddr, SocketAddr};
 use serde::{Deserialize, Serialize};
 use trust_dns_resolver::{error::ResolveError, TokioAsyncResolver};
 
+pub mod error;
+
 /// well-known information about the delegated server for server-server
 /// communication.
 ///
@@ -83,7 +85,7 @@ impl Resolver {
 	}
 
 	/// Resolve the given server name
-	pub async fn resolve(&self, name: &str) -> crate::Result<Server> {
+	pub async fn resolve(&self, name: &str) -> error::Result<Server> {
 		// 1. The host is an ip literal
 		if let Ok(addr) = name.parse::<SocketAddr>() {
 			return Ok(Server::Socket(addr));
@@ -125,7 +127,7 @@ impl Resolver {
 
 	/// Query the .well-known information for a host.
 	#[cfg_attr(test, allow(unused_variables))]
-	async fn well_known(&self, name: &str) -> crate::Result<Option<ServerWellKnown>> {
+	async fn well_known(&self, name: &str) -> error::Result<Option<ServerWellKnown>> {
 		#[cfg(not(test))]
 		let response = self.http.get(format!("https://{}/.well-known/matrix/server", name)).send().await;
 
