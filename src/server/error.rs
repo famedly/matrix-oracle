@@ -1,4 +1,4 @@
-//! Errors that can happen while performing lookup.
+//! Errors that can occur when performing a well-known lookup.
 
 /// The result of attempting to perform well-known lookup.
 pub type Result<T> = std::result::Result<T, Error>;
