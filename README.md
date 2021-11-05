@@ -1,4 +1,4 @@
-# Project Name
+# Matrix oracle
 
 [![pipeline status][badge-pipeline-img]][badge-pipeline-url]
 [![coverage report][badge-coverage-img]][badge-coverage-url]
@@ -11,7 +11,12 @@
 [badge-docs-main-img]: https://img.shields.io/badge/docs-main-blue
 [badge-docs-main-url]: https://famedly.gitlab.io/company/backend/templates/service-template/project_name/index.html
 
-Short description of the project.
+"It is not the server name that bends, it is only yourself"
+
+Matrix oracle is a rust crate that performs lookups of .well-known information for matrix servers, both for the client-server API and the server-server API. It does HTTP requests with [reqwest] and DNS lookups with [trust-dns-resolver].
+
+[reqwest]: https://docs.rs/reqwest
+[trust-dns-resolver]: https://docs.rs/trust-dns-resolver
 
 ---
 
