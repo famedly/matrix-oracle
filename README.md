@@ -18,6 +18,12 @@ Matrix oracle is a rust crate that performs lookups of .well-known information f
 [reqwest]: https://docs.rs/reqwest
 [trust-dns-resolver]: https://docs.rs/trust-dns-resolver
 
+## Pre-commit usage
+
+1. If not installed, install with your package manager, or `pip install --user pre-commit`
+2. Run `pre-commit autoupdate` to update the pre-commit config to use the newest template
+3. Run `pre-commit install` to install the pre-commit hooks to your local environment
+
 ---
 
 # Famedly
