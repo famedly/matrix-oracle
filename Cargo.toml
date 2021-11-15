@@ -1,8 +1,13 @@
 [package]
 name = "matrix-oracle"
-description = ".well-known resolver for the matrix protocol"
 version = "0.1.0"
+description = ".well-known resolver for the matrix protocol"
 authors = ["Amanda Graven <amanda@graven.dev"]
+readme = "README.md"
+repository = "https://gitlab.com/famedly/company/backend/libraries/matrix-oracle"
+license = "AGPL-3.0-only"
+keywords = ["matrix"]
+categories = ["api-bindings"]
 edition = "2018"
 resolver = "2"
 publish = ["famedly"]
