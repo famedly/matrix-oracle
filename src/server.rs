@@ -3,8 +3,11 @@
 use std::net::{IpAddr, SocketAddr};
 
 use serde::{Deserialize, Serialize};
-use trust_dns_resolver::{error::ResolveError, TokioAsyncResolver};
 use tracing::{debug, info, instrument};
+use trust_dns_resolver::{
+	error::{ResolveError, ResolveErrorKind},
+	TokioAsyncResolver,
+};
 
 pub mod error;
 
@@ -184,6 +187,26 @@ impl Resolver {
 			}
 			None => None,
 		}
+	}
+
+	/// Get the [`SocketAddr`] of an address
+	pub async fn socket(&self, server: &Server) -> Result<SocketAddr, ResolveError> {
+		let (host, port) = match *server {
+			Server::Ip(ip) => return Ok(SocketAddr::new(ip, 8448)),
+			Server::Socket(socket) => return Ok(socket),
+			Server::Host(ref host) => (host.as_str(), 8448),
+			#[allow(clippy::expect_used)]
+			Server::HostPort(ref host) => split_port(host).expect("HostPort was constructed with port"),
+			#[allow(clippy::expect_used)]
+			Server::Srv(ref addr, _) => split_port(addr).expect("The SRV record includes the port"),
+		};
+		let record = self.resolver.lookup_ip(host).await?;
+		// We naively get the first IP.
+		let socket = SocketAddr::new(
+			record.iter().next().ok_or(ResolveErrorKind::Message("No records"))?,
+			port,
+		);
+		Ok(socket)
 	}
 }
 
