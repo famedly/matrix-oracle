@@ -1,6 +1,6 @@
 [package]
 name = "matrix-oracle"
-version = "0.1.0"
+version = "0.1.1"
 description = ".well-known resolver for the matrix protocol"
 authors = ["Amanda Graven <amanda@graven.dev"]
 readme = "README.md"
