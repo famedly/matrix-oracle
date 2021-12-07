@@ -7,7 +7,7 @@
 #[derive(Debug)]
 pub enum Error {
 	/// Corresponds to the `FAIL_PROMPT` code in the spec.
-	Prompt(reqwest::Error),
+	Prompt(reqwest_middleware::Error),
 	/// Corresponds to the `FAIL_ERROR` code in the spec.
 	Fail(FailError),
 }
@@ -32,6 +32,12 @@ impl std::fmt::Display for Error {
 
 impl From<reqwest::Error> for Error {
 	fn from(e: reqwest::Error) -> Self {
+		Error::Prompt(e.into())
+	}
+}
+
+impl From<reqwest_middleware::Error> for Error {
+	fn from(e: reqwest_middleware::Error) -> Self {
 		Error::Prompt(e)
 	}
 }
@@ -54,7 +60,7 @@ pub enum FailError {
 	/// URL parsing error
 	Url(url::ParseError),
 	/// HTTP error
-	Http(reqwest::Error),
+	Http(reqwest_middleware::Error),
 }
 
 impl std::error::Error for FailError {
@@ -77,6 +83,12 @@ impl std::fmt::Display for FailError {
 
 impl From<reqwest::Error> for FailError {
 	fn from(e: reqwest::Error) -> Self {
+		FailError::Http(e.into())
+	}
+}
+
+impl From<reqwest_middleware::Error> for FailError {
+	fn from(e: reqwest_middleware::Error) -> Self {
 		FailError::Http(e)
 	}
 }

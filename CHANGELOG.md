@@ -1,6 +1,16 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2021-12-07
+
+### Features
+
+- Cache HTTP responses using reqwest-cache
+
+### Miscellaneous Tasks
+
+- Update files from template
+
 ## [0.1.0] - 2021-11-15
 
 ### Documentation

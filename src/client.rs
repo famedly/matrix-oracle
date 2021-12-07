@@ -5,9 +5,12 @@ pub mod error;
 use std::collections::BTreeMap;
 
 use reqwest::{StatusCode, Url};
+use reqwest_cache::CacheMiddleware;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 
 use self::error::{Error, FailError};
+use crate::cache_options;
 
 /// well-known information for the client-server API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,9 +39,9 @@ pub struct IdentityServerInfo {
 }
 
 /// Resolver for well-known lookups for the client-server API.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Resolver {
-	http: reqwest::Client,
+	http: ClientWithMiddleware,
 }
 
 #[allow(dead_code)]
@@ -52,12 +55,20 @@ struct Versions {
 impl Resolver {
 	/// Construct a new resolver.
 	pub fn new() -> Self {
-		Self { http: reqwest::Client::new() }
+		Self {
+			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+				.with(CacheMiddleware::with_options(cache_options()))
+				.build(),
+		}
 	}
 
 	/// Construct a new resolver with the given reqwest client.
 	pub fn with(http: reqwest::Client) -> Self {
-		Self { http }
+		Self {
+			http: reqwest_middleware::ClientBuilder::new(http)
+				.with(CacheMiddleware::with_options(cache_options()))
+				.build(),
+		}
 	}
 
 	/// Get the base URL for the client-server API with the given name.
@@ -85,7 +96,7 @@ impl Resolver {
 			.map_err(FailError::Http)?
 			.json::<Versions>()
 			.await
-			.map_err(FailError::Http)?;
+			.map_err(|e| FailError::Http(e.into()))?;
 
 		// f. if present, validate identity server endpoint
 		if let Some(identity) = well_known.identity_server {
@@ -103,6 +114,12 @@ impl Resolver {
 		}
 
 		Ok(url)
+	}
+}
+
+impl Default for Resolver {
+	fn default() -> Self {
+		Self { http: ClientWithMiddleware::from(reqwest::Client::new()) }
 	}
 }
 
