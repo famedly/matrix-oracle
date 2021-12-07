@@ -2,12 +2,16 @@
 
 use std::net::{IpAddr, SocketAddr};
 
+use reqwest_cache::CacheMiddleware;
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
 use trust_dns_resolver::{
 	error::{ResolveError, ResolveErrorKind},
 	TokioAsyncResolver,
 };
+
+use crate::cache_options;
 
 pub mod error;
 
@@ -29,7 +33,7 @@ pub struct ServerWellKnown {
 #[derive(Debug, Clone)]
 pub struct Resolver {
 	/// HTTP client.
-	http: reqwest::Client,
+	http: ClientWithMiddleware,
 	/// DNS resolver.
 	resolver: TokioAsyncResolver,
 }
@@ -77,7 +81,9 @@ impl Resolver {
 	/// Constructs a new client.
 	pub fn new() -> Result<Self, ResolveError> {
 		Ok(Self {
-			http: reqwest::Client::new(),
+			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+				.with(CacheMiddleware::with_options(cache_options()))
+				.build(),
 			resolver: TokioAsyncResolver::tokio_from_system_conf()?,
 		})
 	}
@@ -85,7 +91,12 @@ impl Resolver {
 	/// Constructs a new client with the given HTTP client and DNS resolver
 	/// instances.
 	pub fn with(http: reqwest::Client, resolver: TokioAsyncResolver) -> Self {
-		Self { http, resolver }
+		Self {
+			http: reqwest_middleware::ClientBuilder::new(http)
+				.with(CacheMiddleware::with_options(cache_options()))
+				.build(),
+			resolver,
+		}
 	}
 
 	/// Resolve the given server name
@@ -167,7 +178,7 @@ impl Resolver {
 		// Only return Err on connection failure, skip to next step for other errors.
 		let response = match response {
 			Ok(response) => response,
-			Err(e) if e.is_connect() => return Err(e.into()),
+			Err(reqwest_middleware::Error::Reqwest(e)) if e.is_connect() => return Err(e.into()),
 			Err(_) => return Ok(None),
 		};
 		let well_known = response.json::<ServerWellKnown>().await.ok();
