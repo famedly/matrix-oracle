@@ -10,7 +10,6 @@ keywords = ["matrix"]
 categories = ["api-bindings"]
 edition = "2018"
 resolver = "2"
-publish = ["famedly"]
 
 [features]
 default = ["native-tls", "client", "server"]
