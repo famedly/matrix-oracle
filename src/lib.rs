@@ -2,12 +2,7 @@
 //! for the matrix protocol.
 //!
 //! # Features
-//! * `client` - Enable client-server .well-known lookups (enabled by default)
-//! * `server` - Enable server-server .well-known lookups (enabled by default)
-//! * `native-tls` - Use openssl via native-tls as the TLS implementation
-//!   (enabled by default)
-//! * `rustls` - Use rustls as the TLS implementation
-
+#![doc = document_features::document_features!()]
 #![deny(
 	trivial_casts,
 	trivial_numeric_casts,
