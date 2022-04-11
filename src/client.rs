@@ -41,19 +41,26 @@ pub struct IdentityServerInfo {
 /// Resolver for well-known lookups for the client-server API.
 #[derive(Clone, Debug)]
 pub struct Resolver {
+	/// The HTTP client used to send and receive requests. Should transparently
+	/// handle HTTP caching.
 	http: ClientWithMiddleware,
 }
 
+/// Represents the set of matrix versions a server support. Used exclusively for
+/// validating the contents of a response
 #[allow(dead_code)]
 #[derive(Deserialize)]
 struct Versions {
+	/// List of matrix spec versions the server supports.
 	pub versions: Vec<String>,
+	/// Set of unstable matrix extensions which the server supports
 	#[serde(default)]
 	pub unstable_features: BTreeMap<String, bool>,
 }
 
 impl Resolver {
 	/// Construct a new resolver.
+	#[must_use]
 	pub fn new() -> Self {
 		Self {
 			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
@@ -63,6 +70,7 @@ impl Resolver {
 	}
 
 	/// Construct a new resolver with the given reqwest client.
+	#[must_use]
 	pub fn with(http: reqwest::Client) -> Self {
 		Self {
 			http: reqwest_middleware::ClientBuilder::new(http)
