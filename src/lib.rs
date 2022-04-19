@@ -25,8 +25,8 @@ pub mod client;
 #[cfg(feature = "server")]
 pub mod server;
 
-// There's no const default constructor for CacheOptions, so we have to make a
-// function instead of a constant.
+/// There's no const default constructor for CacheOptions, so we have to make a
+/// function instead of a constant.
 pub(crate) fn cache_options() -> CacheOptions {
 	CacheOptions { shared: false, ..CacheOptions::default() }
 }

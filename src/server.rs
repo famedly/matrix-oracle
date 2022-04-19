@@ -55,17 +55,19 @@ pub enum Server {
 
 impl Server {
 	/// The value to use for the `Host` HTTP header.
+	#[must_use]
 	pub fn host_header(&self) -> String {
 		match self {
 			Server::Ip(addr) => addr.to_string(),
 			Server::Socket(addr) => addr.to_string(),
-			Server::Host(host) => host.to_owned(),
-			Server::HostPort(host) => host.to_owned(),
+			Server::Host(host) => host.clone(),
+			Server::HostPort(host) => host.clone(),
 			Server::Srv(_, host) => host.to_string(),
 		}
 	}
 
 	/// The address to connect to.
+	#[must_use]
 	pub fn address(&self) -> String {
 		match self {
 			Server::Ip(addr) => format!("{}:8448", addr),
@@ -90,6 +92,7 @@ impl Resolver {
 
 	/// Constructs a new client with the given HTTP client and DNS resolver
 	/// instances.
+	#[must_use]
 	pub fn with(http: reqwest::Client, resolver: TokioAsyncResolver) -> Self {
 		Self {
 			http: reqwest_middleware::ClientBuilder::new(http)
