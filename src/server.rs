@@ -103,8 +103,12 @@ impl Resolver {
 	}
 
 	/// Resolve the given server name
-	#[instrument(skip(self), err)]
-	pub async fn resolve(&self, name: &str) -> error::Result<Server> {
+	#[instrument(skip(self, port), err)]
+	pub async fn resolve(
+		&self,
+		name: &str,
+		#[cfg(test)] port: Option<u16>,
+	) -> error::Result<Server> {
 		// 1. The host is an ip literal
 		debug!("Parsing socket literal");
 		if let Ok(addr) = name.parse::<SocketAddr>() {
@@ -124,7 +128,14 @@ impl Resolver {
 		}
 		// 3. Query the .well-known endpoint
 		debug!("Querying well known");
-		if let Some(well_known) = self.well_known(name).await? {
+		if let Some(well_known) = self
+			.well_known(
+				name,
+				#[cfg(test)]
+				port,
+			)
+			.await?
+		{
 			debug!("Well-known received: {:?}", &well_known);
 			// 3.1 delegated_hostname is an ip literal
 			debug!("Parsing delegated socket literal");
@@ -166,15 +177,23 @@ impl Resolver {
 
 	/// Query the .well-known information for a host.
 	#[cfg_attr(test, allow(unused_variables))]
-	#[instrument(skip(self, name), err)]
-	async fn well_known(&self, name: &str) -> error::Result<Option<ServerWellKnown>> {
+	#[instrument(skip(self, name, port), err)]
+	async fn well_known(
+		&self,
+		name: &str,
+		#[cfg(test)] port: Option<u16>,
+	) -> error::Result<Option<ServerWellKnown>> {
 		#[cfg(not(test))]
 		let response = self.http.get(format!("https://{}/.well-known/matrix/server", name)).send().await;
 
 		#[cfg(test)]
+		#[allow(clippy::expect_used)]
 		let response = self
 			.http
-			.get(format!("http://{}/.well-known/matrix/server", mockito::server_address()))
+			.get(format!(
+				"http://{name}:{port}/.well-known/matrix/server",
+				port = port.expect("port needed for test env")
+			))
 			.send()
 			.await;
 
@@ -239,8 +258,11 @@ fn split_port(host: &str) -> Option<(&str, u16)> {
 mod tests {
 	use std::net::{IpAddr, SocketAddr};
 
-	use mockito::mock;
 	use trust_dns_resolver::TokioAsyncResolver;
+	use wiremock::{
+		matchers::{method, path},
+		Mock, MockServer, ResponseTemplate,
+	};
 
 	use super::{Resolver, Server};
 
@@ -249,17 +271,17 @@ mod tests {
 	async fn literals() -> Result<(), Box<dyn std::error::Error>> {
 		let resolver = Resolver::new()?;
 		assert_eq!(
-			resolver.resolve("127.0.0.1").await?,
+			resolver.resolve("127.0.0.1", None).await?,
 			Server::Ip(IpAddr::from([127, 0, 0, 1])),
 			"1. IP literal"
 		);
 		assert_eq!(
-			resolver.resolve("127.0.0.1:4884").await?,
+			resolver.resolve("127.0.0.1:4884", None).await?,
 			Server::Socket(SocketAddr::new(IpAddr::from([127, 0, 0, 1]), 4884)),
 			"1. Socket literal"
 		);
 		assert_eq!(
-			resolver.resolve("example.test:1234").await?,
+			resolver.resolve("example.test:1234", None).await?,
 			Server::HostPort(String::from("example.test:1234")),
 			"2. Host with port"
 		);
@@ -269,37 +291,65 @@ mod tests {
 	/// Validates correct handing of the .well-known http endpoint.
 	#[tokio::test]
 	async fn http() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+
 		let client = reqwest::Client::builder()
-			.resolve("example.test", mockito::server_address())
-			.resolve("destination.test", mockito::server_address())
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
 			.build()?;
 		let resolver = Resolver::with(client, TokioAsyncResolver::tokio_from_system_conf()?);
 
-		let addr = mockito::server_address();
+		let addr = mock_server.address();
 
-		let _ip = mock("GET", "/.well-known/matrix/server")
-			.with_body(format!(r#"{{"m.server": "{}"}}"#, addr.ip()))
-			.create();
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/server"))
+			.respond_with(
+				ResponseTemplate::new(200).set_body_raw(
+					format!(r#"{{"m.server": "{}"}}"#, addr.ip()),
+					"application/json",
+				),
+			)
+			.up_to_n_times(1)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
 		assert_eq!(
-			resolver.resolve("example.test").await?,
+			resolver.resolve("example.test", Some(addr.port())).await?,
 			Server::Ip(addr.ip()),
 			"3.1 delegated_hostname is an IP literal"
 		);
 
-		let _sock = mock("GET", "/.well-known/matrix/server")
-			.with_body(format!(r#"{{"m.server": "{}"}}"#, addr))
-			.create();
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/server"))
+			.respond_with(
+				ResponseTemplate::new(200)
+					.set_body_raw(format!(r#"{{"m.server": "{}"}}"#, addr), "application/json"),
+			)
+			.up_to_n_times(1)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
 		assert_eq!(
-			resolver.resolve("example.test").await?,
-			Server::Socket(mockito::server_address()),
+			resolver.resolve("example.test", Some(addr.port())).await?,
+			Server::Socket(*mock_server.address()),
 			"3.1 delegated_hostname is a socket literal"
 		);
 
-		let _port = mock("GET", "/.well-known/matrix/server")
-			.with_body(format!(r#"{{"m.server": "destination.test:{}"}}"#, addr.port()))
-			.create();
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/server"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(r#"{{"m.server": "destination.test:{}"}}"#, addr.port()),
+				"application/json",
+			))
+			.expect(1)
+			.up_to_n_times(1)
+			.mount(&mock_server)
+			.await;
+
 		assert_eq!(
-			resolver.resolve("example.test").await?,
+			resolver.resolve("example.test", Some(addr.port())).await?,
 			Server::HostPort(format!("destination.test:{}", addr.port())),
 			"3.2 delegated_hostname includes a port"
 		);
