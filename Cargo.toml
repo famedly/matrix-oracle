@@ -33,5 +33,5 @@ trust-dns-resolver = { version = "0.21", optional = true }
 url = { version = "2.2", optional = true }
 
 [dev-dependencies]
-mockito = "0.31"
 tokio = { version = "1.12", features = ["macros"] }
+wiremock = "0.5"

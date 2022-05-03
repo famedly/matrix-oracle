@@ -84,7 +84,7 @@ impl Resolver {
 		#[cfg(not(test))]
 		let url = Url::parse(&format!("https://{}", name))?;
 		#[cfg(test)]
-		let url = Url::parse(&format!("http://{}:{}", name, mockito::server_address().port()))?;
+		let url = Url::parse(&format!("http://{}", name))?;
 
 		// 3. make a GET request to the well-known endpoint
 		let response = self.http.get(url.join(".well-known/matrix/client")?).send().await?;
@@ -133,52 +133,77 @@ impl Default for Resolver {
 
 #[cfg(test)]
 mod tests {
-	use mockito::mock;
+	use wiremock::{
+		matchers::{method, path},
+		Mock, MockServer, ResponseTemplate,
+	};
 
 	use super::Resolver;
 
 	/// Tests that a 404 response is correctly handled
 	#[tokio::test]
 	async fn not_found() -> Result<(), Box<dyn std::error::Error>> {
-		let mock = mock("GET", "/.well-known/matrix/client").with_status(404).create();
-		let http = reqwest::Client::builder()
-			.resolve("example.test", mockito::server_address())
-			.build()?;
+		let mock_server = MockServer::start().await;
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(404))
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http =
+			reqwest::Client::builder().resolve("example.test", *mock_server.address()).build()?;
 		let resolver = Resolver::with(http);
-		let url = resolver.resolve("example.test").await?;
+		let url =
+			resolver.resolve(&format!("example.test:{}", mock_server.address().port())).await?;
 
 		assert_eq!(
-			format!("http://example.test:{}/", mockito::server_address().port()),
+			format!("http://example.test:{}/", mock_server.address().port()),
 			url.to_string()
 		);
-		mock.assert();
 		Ok(())
 	}
 
 	#[tokio::test]
 	async fn resolve() -> Result<(), Box<dyn std::error::Error>> {
-		let port = mockito::server_address().port();
-		let well_known = mock("GET", "/.well-known/matrix/client")
-			.with_body(format!(
-				r#"{{"m.homeserver": {{"base_url": "http://destination.test:{}"}} }}"#,
-				port
+		let mock_server = MockServer::start().await;
+
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(
+					r#"{{"m.homeserver": {{"base_url": "http://destination.test:{}"}} }}"#,
+					port
+				),
+				"application/json",
 			))
-			.create();
-		let versions = mock("GET", "/_matrix/client/versions")
-			.with_body(r#"{"versions":["r0.0.1"]}"#)
-			.create();
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(200)
+					.set_body_raw(r#"{"versions":["r0.0.1"]}"#, "application/json"),
+			)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
 
 		let http = reqwest::Client::builder()
-			.resolve("example.test", mockito::server_address())
-			.resolve("destination.test", mockito::server_address())
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
 			.build()?;
 		let resolver = Resolver::with(http);
 
-		let url = resolver.resolve("example.test").await?;
+		let url =
+			resolver.resolve(&format!("example.test:{}", mock_server.address().port())).await?;
 
 		assert_eq!(url.to_string(), format!("http://destination.test:{}/", port));
-		well_known.assert();
-		versions.assert();
 		Ok(())
 	}
 }
