@@ -35,3 +35,6 @@ url = { version = "2.2", optional = true }
 [dev-dependencies]
 tokio = { version = "1.12", features = ["macros"] }
 wiremock = "0.5"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["document-features"]

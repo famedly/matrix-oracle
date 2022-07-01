@@ -2,7 +2,7 @@
 //! for the matrix protocol.
 //!
 //! # Features
-#![doc = document_features::document_features!()]
+#![cfg_attr(doc, doc = document_features::document_features!())]
 #![deny(
 	trivial_casts,
 	trivial_numeric_casts,
