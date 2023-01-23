@@ -22,7 +22,7 @@ pub mod error;
 /// [the specification]: https://matrix.org/docs/spec/server_server/latest#get-well-known-matrix-server
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerWellKnown {
-	/// The server name to delegate server-server communciations to, with
+	/// The server name to delegate server-server communications to, with
 	/// optional port
 	#[serde(rename = "m.server")]
 	pub server: String,
