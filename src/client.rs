@@ -5,12 +5,11 @@ pub mod error;
 use std::collections::BTreeMap;
 
 use reqwest::{StatusCode, Url};
-use reqwest_cache::CacheMiddleware;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 
 use self::error::{Error, FailError};
-use crate::cache_options;
+use crate::cache;
 
 /// well-known information for the client-server API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +63,7 @@ impl Resolver {
 	pub fn new() -> Self {
 		Self {
 			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-				.with(CacheMiddleware::with_options(cache_options()))
+				.with(cache())
 				.build(),
 		}
 	}
@@ -72,11 +71,7 @@ impl Resolver {
 	/// Construct a new resolver with the given reqwest client.
 	#[must_use]
 	pub fn with(http: reqwest::Client) -> Self {
-		Self {
-			http: reqwest_middleware::ClientBuilder::new(http)
-				.with(CacheMiddleware::with_options(cache_options()))
-				.build(),
-		}
+		Self { http: reqwest_middleware::ClientBuilder::new(http).with(cache()).build() }
 	}
 
 	/// Get the base URL for the client-server API with the given name.
