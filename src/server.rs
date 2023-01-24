@@ -2,7 +2,6 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use reqwest_cache::CacheMiddleware;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
@@ -11,7 +10,7 @@ use trust_dns_resolver::{
 	TokioAsyncResolver,
 };
 
-use crate::cache_options;
+use crate::cache;
 
 pub mod error;
 
@@ -23,7 +22,7 @@ pub mod error;
 /// [the specification]: https://matrix.org/docs/spec/server_server/latest#get-well-known-matrix-server
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerWellKnown {
-	/// The server name to delegate server-server communciations to, with
+	/// The server name to delegate server-server communications to, with
 	/// optional port
 	#[serde(rename = "m.server")]
 	pub server: String,
@@ -84,7 +83,7 @@ impl Resolver {
 	pub fn new() -> Result<Self, ResolveError> {
 		Ok(Self {
 			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-				.with(CacheMiddleware::with_options(cache_options()))
+				.with(cache())
 				.build(),
 			resolver: TokioAsyncResolver::tokio_from_system_conf()?,
 		})
@@ -94,12 +93,7 @@ impl Resolver {
 	/// instances.
 	#[must_use]
 	pub fn with(http: reqwest::Client, resolver: TokioAsyncResolver) -> Self {
-		Self {
-			http: reqwest_middleware::ClientBuilder::new(http)
-				.with(CacheMiddleware::with_options(cache_options()))
-				.build(),
-			resolver,
-		}
+		Self { http: reqwest_middleware::ClientBuilder::new(http).with(cache()).build(), resolver }
 	}
 
 	/// Resolve the given server name
