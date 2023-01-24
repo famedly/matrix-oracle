@@ -1,6 +1,26 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2023-01-24
+
+### Documentation
+
+- Automate documentation of features
+
+### Miscellaneous Tasks
+
+- Remove registry restriction
+- Upgrade dependencies
+- Update files from template
+- Add doc cfg gate for generated feature docs
+- Replace reqwest-cache with http-cache-reqwest
+- Update CI template URL
+- Correct typo in documentation
+
+### Testing
+
+- Switch http mock lib from mockito to wiremock
+
 ## [0.1.2] - 2022-03-01
 
 ### Miscellaneous Tasks
