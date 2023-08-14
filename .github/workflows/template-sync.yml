@@ -1,0 +1,23 @@
+# File: .github/workflows/template-sync.yml
+
+on:
+  # cronjob trigger
+  schedule:
+  - cron:  "0 0 1 * *"
+  # manual trigger
+  workflow_dispatch:
+jobs:
+  repo-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # To use this repository's private action, you must check out the repository
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: actions-template-sync
+        uses: AndreasAugustin/actions-template-sync@54cc6daa8773c61a6df312b2cb9f4f82ef72d690
+        with:
+          github_token: ${{ github.token }}
+          source_repo_path: famedly/rust-library-template
+          pr_reviewers: "famedly/workflows"
+          upstream_branch: main
