@@ -1,4 +1,5 @@
 # File: .github/workflows/template-sync.yml
+name: Template sync
 
 on:
   # cronjob trigger
@@ -9,15 +10,24 @@ on:
 jobs:
   repo-sync:
     runs-on: ubuntu-latest
-
     steps:
       # To use this repository's private action, you must check out the repository
+      - name: Get app token
+        id: app_token
+        uses: famedly/Meow-GitHub-App-Auth@v0.1.0
+        with:
+          app-id: 376670
+          installation-id: 40767688
+          key-base64: ${{ secrets.TEMPLATE_SYNC_APP_PK }}
+          
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          token: ${{ steps.app_token.outputs.GITHUB_APP_TOKEN }}
       - name: actions-template-sync
         uses: AndreasAugustin/actions-template-sync@54cc6daa8773c61a6df312b2cb9f4f82ef72d690
         with:
-          github_token: ${{ github.token }}
+          github_token: ${{ steps.app_token.outputs.GITHUB_APP_TOKEN }}
           source_repo_path: famedly/rust-library-template
           pr_reviewers: "famedly/workflows"
           upstream_branch: main
