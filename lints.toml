@@ -3,7 +3,7 @@
 #
 deny = []
 allow = [
-    'clippy::tabs_in_doc_comments'
+    'clippy::tabs_in_doc_comments',
 ]
 warn = [
     'clippy::branches_sharing_code',
