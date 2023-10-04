@@ -24,7 +24,7 @@ rustls = ["reqwest/rustls-tls", "trust-dns-resolver/dns-over-rustls", "trust-dns
 
 [dependencies]
 document-features = "0.2"
-http-cache-reqwest = { version = "0.5.2", default-features = false, features = ["manager-moka"] }
+http-cache-reqwest = { version = "0.11.3", default-features = false, features = ["manager-moka"] }
 serde = { version = "1.0", features = ["derive"] }
 reqwest = { version = "0.11", default-features = false, features = ["json"] }
 reqwest-middleware = "0.2"
