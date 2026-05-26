@@ -25,7 +25,7 @@ jobs:
         with:
           token: ${{ steps.app_token.outputs.GITHUB_APP_TOKEN }}
       - name: actions-template-sync
-        uses: AndreasAugustin/actions-template-sync@54cc6daa8773c61a6df312b2cb9f4f82ef72d690
+        uses: AndreasAugustin/actions-template-sync@8a0f668b83c32a0f673353086d74f12b8853d4f5
         with:
           github_token: ${{ steps.app_token.outputs.GITHUB_APP_TOKEN }}
           source_repo_path: famedly/rust-library-template
