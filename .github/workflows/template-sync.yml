@@ -14,14 +14,14 @@ jobs:
       # To use this repository's private action, you must check out the repository
       - name: Get app token
         id: app_token
-        uses: famedly/Meow-GitHub-App-Auth@v0.1.0
+        uses: famedly/Meow-GitHub-App-Auth@3076fbaf849c50f5995cf9587cbe9a23bb0910e1
         with:
           app-id: ${{ vars.TEMPLATE_SYNC_APP_ID }}
           installation-id: ${{ vars.TEMPLATE_SYNC_INSTALLATION_ID }}
           key-base64: ${{ secrets.TEMPLATE_SYNC_APP_PK }}
           
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
         with:
           token: ${{ steps.app_token.outputs.GITHUB_APP_TOKEN }}
       - name: actions-template-sync
