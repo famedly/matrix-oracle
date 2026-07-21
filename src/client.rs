@@ -87,6 +87,8 @@ impl Resolver {
 		if response.status() == StatusCode::NOT_FOUND {
 			return Ok(url);
 		};
+		// b. otherwise, if the status code is not 200, FAIL_PROMPT
+		let response = response.error_for_status()?;
 		// c. parse the response as json
 		let well_known = response.json::<ClientWellKnown>().await?;
 		// d+e.i Extract base_url and parse it as a URL
@@ -97,19 +99,17 @@ impl Resolver {
 			.send()
 			.await
 			.map_err(FailError::Http)?
+			.error_for_status()
+			.map_err(FailError::from)?
 			.json::<Versions>()
 			.await
 			.map_err(|e| FailError::Http(e.into()))?;
 
-		// f. if present, validate identity server endpoint
+		// f. if present, validate identity server v2 endpoint
 		if let Some(identity) = well_known.identity_server {
 			let url = Url::parse(&identity.base_url)?;
 			let result: Result<_, FailError> = async {
-				self.http
-					.get(url.join("_matrix/identity/api/v1")?)
-					.send()
-					.await?
-					.error_for_status()?;
+				self.http.get(url.join("_matrix/identity/v2")?).send().await?.error_for_status()?;
 				Ok(())
 			}
 			.await;
@@ -129,11 +129,11 @@ impl Default for Resolver {
 #[cfg(test)]
 mod tests {
 	use wiremock::{
-		matchers::{method, path},
 		Mock, MockServer, ResponseTemplate,
+		matchers::{method, path},
 	};
 
-	use super::Resolver;
+	use super::{Resolver, error::Error};
 
 	/// Tests that a 404 response is correctly handled
 	#[tokio::test]
@@ -199,6 +199,113 @@ mod tests {
 			resolver.resolve(&format!("example.test:{}", mock_server.address().port())).await?;
 
 		assert_eq!(url.to_string(), format!("http://destination.test:{}/", port));
+		Ok(())
+	}
+
+	/// Tests that a present identity server is validated at the current spec
+	/// endpoint (`/_matrix/identity/v2`), not the removed v1 endpoint.
+	#[tokio::test]
+	async fn resolve_with_identity_server() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(
+					r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}},"m.identity_server":{{"base_url":"http://destination.test:{port}"}}}}"#
+				),
+				"application/json",
+			))
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(200)
+					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
+			)
+			.mount(&mock_server)
+			.await;
+		// The identity server MUST be validated at the v2 endpoint.
+		Mock::given(method("GET"))
+			.and(path("/_matrix/identity/v2"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw("{}", "application/json"))
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let url = resolver.resolve(&format!("example.test:{port}")).await?;
+		assert_eq!(url.to_string(), format!("http://destination.test:{port}/"));
+		Ok(())
+	}
+
+	/// Per spec: a non-404, non-200 response to the well-known request must
+	/// `FAIL_PROMPT`, even if the body happens to parse as valid JSON.
+	#[tokio::test]
+	async fn well_known_non_200_fails_prompt() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(500).set_body_raw(
+				format!(r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}}}}"#),
+				"application/json",
+			))
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let result = resolver.resolve(&format!("example.test:{port}")).await;
+
+		assert!(matches!(result, Err(Error::Prompt(_))), "expected FAIL_PROMPT, got {result:?}");
+		Ok(())
+	}
+
+	/// Per spec: a failed `/_matrix/client/versions` validation must
+	/// `FAIL_ERROR`, even if the response body happens to parse as `Versions`.
+	#[tokio::test]
+	async fn versions_non_200_fails_error() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}}}}"#),
+				"application/json",
+			))
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(500)
+					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
+			)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let result = resolver.resolve(&format!("example.test:{port}")).await;
+
+		assert!(matches!(result, Err(Error::Fail(_))), "expected FAIL_ERROR, got {result:?}");
 		Ok(())
 	}
 }
