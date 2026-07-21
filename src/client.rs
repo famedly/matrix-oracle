@@ -8,7 +8,7 @@ use reqwest::{StatusCode, Url};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 
-use self::error::{Error, FailError};
+use self::error::{Error, FailError, UnexpectedStatus};
 use crate::cache;
 
 /// well-known information for the client-server API.
@@ -88,28 +88,33 @@ impl Resolver {
 			return Ok(url);
 		};
 		// b. otherwise, if the status code is not 200, FAIL_PROMPT
-		let response = response.error_for_status()?;
+		if response.status() != StatusCode::OK {
+			return Err(UnexpectedStatus(response.status()).into());
+		}
 		// c. parse the response as json
 		let well_known = response.json::<ClientWellKnown>().await?;
 		// d+e.i Extract base_url and parse it as a URL
 		let url = Url::parse(&well_known.homeserver.base_url)?;
-		// e.ii Validate versions endpoint
-		self.http
+		// e.ii Validate versions endpoint: a non-200 response is a FAIL_ERROR
+		let versions = self
+			.http
 			.get(url.join("_matrix/client/versions")?)
 			.send()
 			.await
-			.map_err(FailError::Http)?
-			.error_for_status()
-			.map_err(FailError::from)?
-			.json::<Versions>()
-			.await
-			.map_err(|e| FailError::Http(e.into()))?;
+			.map_err(FailError::Http)?;
+		if versions.status() != StatusCode::OK {
+			return Err(Error::Fail(UnexpectedStatus(versions.status()).into()));
+		}
+		versions.json::<Versions>().await.map_err(|e| FailError::Http(e.into()))?;
 
 		// f. if present, validate identity server v2 endpoint
 		if let Some(identity) = well_known.identity_server {
 			let url = Url::parse(&identity.base_url)?;
 			let result: Result<_, FailError> = async {
-				self.http.get(url.join("_matrix/identity/v2")?).send().await?.error_for_status()?;
+				let response = self.http.get(url.join("_matrix/identity/v2")?).send().await?;
+				if response.status() != StatusCode::OK {
+					return Err(UnexpectedStatus(response.status()).into());
+				}
 				Ok(())
 			}
 			.await;
@@ -294,6 +299,123 @@ mod tests {
 				ResponseTemplate::new(500)
 					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
 			)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let result = resolver.resolve(&format!("example.test:{port}")).await;
+
+		assert!(matches!(result, Err(Error::Fail(_))), "expected FAIL_ERROR, got {result:?}");
+		Ok(())
+	}
+
+	/// Per spec: only a `200` well-known response is accepted. A
+	/// 2xx-but-not-200 status (e.g. `201`) must `FAIL_PROMPT`, even with a
+	/// parseable body.
+	#[tokio::test]
+	async fn well_known_2xx_non_200_fails_prompt() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(201).set_body_raw(
+				format!(r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}}}}"#),
+				"application/json",
+			))
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(200)
+					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
+			)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let result = resolver.resolve(&format!("example.test:{port}")).await;
+
+		assert!(matches!(result, Err(Error::Prompt(_))), "expected FAIL_PROMPT, got {result:?}");
+		Ok(())
+	}
+
+	/// Per spec: homeserver validation requires a `200` from
+	/// `/_matrix/client/versions`. A 2xx-but-not-200 status must `FAIL_ERROR`,
+	/// even with a parseable body.
+	#[tokio::test]
+	async fn versions_2xx_non_200_fails_error() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}}}}"#),
+				"application/json",
+			))
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(201)
+					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
+			)
+			.expect(1)
+			.mount(&mock_server)
+			.await;
+
+		let http = reqwest::Client::builder()
+			.resolve("example.test", *mock_server.address())
+			.resolve("destination.test", *mock_server.address())
+			.build()?;
+		let resolver = Resolver::with(http);
+		let result = resolver.resolve(&format!("example.test:{port}")).await;
+
+		assert!(matches!(result, Err(Error::Fail(_))), "expected FAIL_ERROR, got {result:?}");
+		Ok(())
+	}
+
+	/// Per spec: identity-server validation requires a `200` from
+	/// `/_matrix/identity/v2`. A 2xx-but-not-200 status must `FAIL_ERROR`.
+	#[tokio::test]
+	async fn identity_2xx_non_200_fails_error() -> Result<(), Box<dyn std::error::Error>> {
+		let mock_server = MockServer::start().await;
+		let port = mock_server.address().port();
+
+		Mock::given(method("GET"))
+			.and(path("/.well-known/matrix/client"))
+			.respond_with(ResponseTemplate::new(200).set_body_raw(
+				format!(
+					r#"{{"m.homeserver":{{"base_url":"http://destination.test:{port}"}},"m.identity_server":{{"base_url":"http://destination.test:{port}"}}}}"#
+				),
+				"application/json",
+			))
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/client/versions"))
+			.respond_with(
+				ResponseTemplate::new(200)
+					.set_body_raw(r#"{"versions":["v1.11"]}"#, "application/json"),
+			)
+			.mount(&mock_server)
+			.await;
+		Mock::given(method("GET"))
+			.and(path("/_matrix/identity/v2"))
+			.respond_with(ResponseTemplate::new(204))
 			.expect(1)
 			.mount(&mock_server)
 			.await;

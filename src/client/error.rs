@@ -54,6 +54,14 @@ impl From<FailError> for Error {
 	}
 }
 
+impl From<UnexpectedStatus> for Error {
+	/// The well-known endpoint requires a `200` response; any other status is a
+	/// `FAIL_PROMPT`.
+	fn from(e: UnexpectedStatus) -> Self {
+		Error::Prompt(reqwest_middleware::Error::middleware(e))
+	}
+}
+
 /// Corresponds to the `FAIL_PROMPT` code in the spec.
 #[derive(Debug)]
 pub enum FailError {
@@ -98,3 +106,23 @@ impl From<url::ParseError> for FailError {
 		FailError::Url(e)
 	}
 }
+
+impl From<UnexpectedStatus> for FailError {
+	/// Homeserver/identity-server validation requires a `200` response; any
+	/// other status is a validation failure (`FAIL_ERROR`).
+	fn from(e: UnexpectedStatus) -> Self {
+		FailError::Http(reqwest_middleware::Error::middleware(e))
+	}
+}
+
+/// An HTTP response carried a status code other than the expected `200 OK`.
+#[derive(Debug)]
+pub(crate) struct UnexpectedStatus(pub reqwest::StatusCode);
+
+impl std::fmt::Display for UnexpectedStatus {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "expected status 200 OK, got {}", self.0)
+	}
+}
+
+impl std::error::Error for UnexpectedStatus {}
