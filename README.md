@@ -2,10 +2,12 @@
 
 "It is not the server name that bends, it is only yourself"
 
-Matrix oracle is a rust crate that performs lookups of .well-known information for matrix servers, both for the client-server API and the server-server API. It does HTTP requests with [reqwest] and DNS lookups with [trust-dns-resolver].
+Matrix oracle is a rust crate that performs lookups of .well-known information for matrix servers, both for the client-server API and the server-server API. It does HTTP requests with [reqwest] and DNS lookups with [hickory-resolver].
+
+The default TLS backend is `rustls`; the `native-tls` feature is available as an opt-in alternative.
 
 [reqwest]: https://docs.rs/reqwest
-[trust-dns-resolver]: https://docs.rs/trust-dns-resolver
+[hickory-resolver]: https://docs.rs/hickory-resolver
 
 ## Pre-commit usage
 

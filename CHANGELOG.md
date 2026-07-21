@@ -1,6 +1,22 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 0.2.0
+
+### Breaking
+- Edition 2024, MSRV 1.88.
+- Default TLS backend is now `rustls` (was `native-tls`); `native-tls` is opt-in.
+- Migrated DNS from `trust-dns-resolver` to `hickory-resolver`; `server::Resolver::with` now takes a `hickory_resolver::TokioResolver`.
+- Dependency stack updated: reqwest 0.12, reqwest-middleware 0.4, http-cache-reqwest 0.16.
+
+### Changed
+- Server-server resolution now queries `_matrix-fed._tcp` (spec v1.8+) with `_matrix._tcp` as a deprecated fallback.
+- Client-server resolution validates the identity server at `/_matrix/identity/v2` (was the removed `/_matrix/identity/api/v1`).
+
+### Added
+- Nix flake devshell.
+- Property tests for the pure resolver helpers.
+
 ## [0.1.3] - 2023-01-24
 
 ### Documentation
