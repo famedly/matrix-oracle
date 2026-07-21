@@ -24,6 +24,7 @@
       {
         devShells.default = pkgs.mkShell {
           packages = [
+            (pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.rustfmt))
             rust
             pkgs.cargo-nextest
             pkgs.typos

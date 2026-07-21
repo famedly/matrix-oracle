@@ -2,10 +2,10 @@
 
 use std::net::{IpAddr, SocketAddr};
 
+use hickory_resolver::{TokioResolver, net::NetError, proto::rr::RData};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
-use hickory_resolver::{TokioResolver, net::NetError, proto::rr::RData};
 
 use crate::cache;
 
@@ -247,10 +247,8 @@ impl Resolver {
 		};
 		let record = self.resolver.lookup_ip(host).await?;
 		// We naively get the first IP.
-		let socket = SocketAddr::new(
-			record.iter().next().ok_or(NetError::Message("No records"))?,
-			port,
-		);
+		let socket =
+			SocketAddr::new(record.iter().next().ok_or(NetError::Message("No records"))?, port);
 		Ok(socket)
 	}
 }
@@ -283,8 +281,8 @@ mod tests {
 	use hickory_resolver::TokioResolver;
 	use proptest::prelude::*;
 	use wiremock::{
-		matchers::{method, path},
 		Mock, MockServer, ResponseTemplate,
+		matchers::{method, path},
 	};
 
 	use super::{Resolver, Server};
