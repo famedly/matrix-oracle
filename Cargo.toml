@@ -10,7 +10,7 @@ keywords = ["matrix"]
 categories = ["api-bindings"]
 edition = "2024"
 rust-version = "1.85"
-resolver = "2"
+resolver = "3"
 
 [features]
 default = ["native-tls", "client", "server"]

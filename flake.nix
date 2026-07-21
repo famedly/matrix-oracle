@@ -10,7 +10,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -27,6 +27,8 @@
             rust
             pkgs.cargo-nextest
             pkgs.typos
+            pkgs.openssl
+            pkgs.pkg-config
           ];
         };
       });
