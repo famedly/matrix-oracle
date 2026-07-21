@@ -145,9 +145,9 @@ impl Resolver {
 				info!("The server name is a delegated hostname with port");
 				return Ok(Server::HostPort(well_known.server));
 			}
-			// 3.3 Look up SRV record
+			// 3.3 Look up SRV record (fed record, then deprecated)
 			debug!("Looking up SRV record for delegated hostname");
-			if let Some(name) = self.srv_lookup(&well_known.server).await {
+			if let Some(name) = self.srv_lookup_with_fallback(&well_known.server).await {
 				info!("The server name is a delegated SRV record");
 				return Ok(Server::Srv(name, well_known.server));
 			}
@@ -155,9 +155,9 @@ impl Resolver {
 			debug!("Using delegated hostname directly");
 			return Ok(Server::Host(well_known.server));
 		}
-		// 4. The .well-known lookup failed, query SRV
+		// 4. The .well-known lookup failed, query SRV (fed record, then deprecated)
 		debug!("Looking up SRV record for hostname");
-		if let Some(srv) = self.srv_lookup(name).await {
+		if let Some(srv) = self.srv_lookup_with_fallback(name).await {
 			info!("The server name is an SRV record");
 			return Ok(Server::Srv(srv, name.to_owned()));
 		}
@@ -198,10 +198,11 @@ impl Resolver {
 		Ok(well_known)
 	}
 
-	/// Query the matrix SRV DNS record for a hostname
-	#[instrument(skip(self, name))]
-	async fn srv_lookup(&self, name: &str) -> Option<String> {
-		let srv = self.resolver.srv_lookup(format!("_matrix._tcp.{}", name)).await.ok()?;
+	/// Query a single SRV record set and return `host:port` of the
+	/// lowest-priority record, if any.
+	#[instrument(skip(self))]
+	async fn srv_lookup(&self, query: &str) -> Option<String> {
+		let srv = self.resolver.srv_lookup(query).await.ok()?;
 		// Get a record with the lowest priority value
 		match srv
 			.answers()
@@ -219,6 +220,18 @@ impl Resolver {
 			}
 			None => None,
 		}
+	}
+
+	/// Look up the federation SRV record, falling back to the deprecated
+	/// `_matrix._tcp` record per the server-server resolution spec.
+	#[instrument(skip(self))]
+	async fn srv_lookup_with_fallback(&self, name: &str) -> Option<String> {
+		if let Some(found) = self.srv_lookup(&fed_srv_name(name)).await {
+			debug!("Found _matrix-fed._tcp SRV record");
+			return Some(found);
+		}
+		debug!("No _matrix-fed._tcp record; trying deprecated _matrix._tcp");
+		self.srv_lookup(&deprecated_srv_name(name)).await
 	}
 
 	/// Get the [`SocketAddr`] of an address
@@ -240,6 +253,16 @@ impl Resolver {
 		);
 		Ok(socket)
 	}
+}
+
+/// The current (spec v1.8+) federation SRV record name for a server name.
+fn fed_srv_name(name: &str) -> String {
+	format!("_matrix-fed._tcp.{name}")
+}
+
+/// The deprecated SRV record name, kept as a fallback per the spec.
+fn deprecated_srv_name(name: &str) -> String {
+	format!("_matrix._tcp.{name}")
 }
 
 /// Get the port at the end of a host string if there is one.
@@ -264,6 +287,14 @@ mod tests {
 	};
 
 	use super::{Resolver, Server};
+
+	/// Validates the SRV query-name construction for the fed record and the
+	/// deprecated fallback record.
+	#[test]
+	fn srv_query_names() {
+		assert_eq!(super::fed_srv_name("example.test"), "_matrix-fed._tcp.example.test");
+		assert_eq!(super::deprecated_srv_name("example.test"), "_matrix._tcp.example.test");
+	}
 
 	/// Validates correct parsing of IP literals and server name with port
 	#[tokio::test]
