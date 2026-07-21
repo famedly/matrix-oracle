@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Breaking
 - Edition 2024, MSRV 1.88.
 - Default TLS backend is now `rustls` (was `native-tls`); `native-tls` is opt-in.
-- Migrated DNS from `trust-dns-resolver` to `hickory-resolver`; `server::Resolver::with` now takes a `hickory_resolver::TokioResolver`.
+- Migrated DNS from `trust-dns-resolver` to `hickory-resolver`; `server::Resolver::with` now takes a `hickory_resolver::TokioResolver`, and `server::Resolver::new()` / `socket()` now return `hickory_resolver::net::NetError` (hickory 0.26 has no `ResolveError`).
 - Dependency stack updated: reqwest 0.12, reqwest-middleware 0.4, http-cache-reqwest 0.16.
 
 ### Changed
