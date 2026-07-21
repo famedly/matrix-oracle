@@ -281,6 +281,7 @@ mod tests {
 	use std::net::{IpAddr, SocketAddr};
 
 	use hickory_resolver::TokioResolver;
+	use proptest::prelude::*;
 	use wiremock::{
 		matchers::{method, path},
 		Mock, MockServer, ResponseTemplate,
@@ -384,5 +385,38 @@ mod tests {
 			"3.2 delegated_hostname includes a port"
 		);
 		Ok(())
+	}
+
+	proptest! {
+		/// `split_port` round-trips a `host:port` string for any valid u16 port
+		/// and non-colon host.
+		#[test]
+		fn split_port_roundtrip(host in "[a-z][a-z0-9-]{0,20}", port in any::<u16>()) {
+			let input = format!("{host}:{port}");
+			prop_assert_eq!(super::split_port(&input), Some((host.as_str(), port)));
+		}
+
+		/// A host with no colon never parses as host:port.
+		#[test]
+		fn split_port_rejects_bare_host(host in "[a-z][a-z0-9-]{0,20}") {
+			prop_assert_eq!(super::split_port(&host), None);
+		}
+
+		/// SRV query builders always produce the spec-prefixed names.
+		#[test]
+		fn srv_names_prefixed(name in "[a-z][a-z0-9.-]{0,40}") {
+			prop_assert!(super::fed_srv_name(&name).starts_with("_matrix-fed._tcp."));
+			prop_assert!(super::deprecated_srv_name(&name).starts_with("_matrix._tcp."));
+			prop_assert!(super::fed_srv_name(&name).ends_with(&name));
+		}
+
+		/// `Host` always derives the default federation port 8448 in `address`,
+		/// and the bare host in `host_header`.
+		#[test]
+		fn host_derivations(host in "[a-z][a-z0-9.-]{0,40}") {
+			let server = Server::Host(host.clone());
+			prop_assert_eq!(server.address(), format!("{host}:8448"));
+			prop_assert_eq!(server.host_header(), host);
+		}
 	}
 }
