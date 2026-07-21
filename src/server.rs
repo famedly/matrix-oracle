@@ -5,10 +5,7 @@ use std::net::{IpAddr, SocketAddr};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
-use trust_dns_resolver::{
-	error::{ResolveError, ResolveErrorKind},
-	TokioAsyncResolver,
-};
+use hickory_resolver::{TokioResolver, net::NetError, proto::rr::RData};
 
 use crate::cache;
 
@@ -34,7 +31,7 @@ pub struct Resolver {
 	/// HTTP client.
 	http: ClientWithMiddleware,
 	/// DNS resolver.
-	resolver: TokioAsyncResolver,
+	resolver: TokioResolver,
 }
 
 /// Resolved server name
@@ -80,19 +77,19 @@ impl Server {
 
 impl Resolver {
 	/// Constructs a new client.
-	pub fn new() -> Result<Self, ResolveError> {
+	pub fn new() -> Result<Self, NetError> {
 		Ok(Self {
 			http: reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
 				.with(cache())
 				.build(),
-			resolver: TokioAsyncResolver::tokio_from_system_conf()?,
+			resolver: TokioResolver::builder_tokio()?.build()?,
 		})
 	}
 
 	/// Constructs a new client with the given HTTP client and DNS resolver
 	/// instances.
 	#[must_use]
-	pub fn with(http: reqwest::Client, resolver: TokioAsyncResolver) -> Self {
+	pub fn with(http: reqwest::Client, resolver: TokioResolver) -> Self {
 		Self { http: reqwest_middleware::ClientBuilder::new(http).with(cache()).build(), resolver }
 	}
 
@@ -206,18 +203,26 @@ impl Resolver {
 	async fn srv_lookup(&self, name: &str) -> Option<String> {
 		let srv = self.resolver.srv_lookup(format!("_matrix._tcp.{}", name)).await.ok()?;
 		// Get a record with the lowest priority value
-		match srv.iter().min_by_key(|srv| srv.priority()) {
+		match srv
+			.answers()
+			.iter()
+			.filter_map(|record| match &record.data {
+				RData::SRV(srv) => Some(srv),
+				_ => None,
+			})
+			.min_by_key(|srv| srv.priority)
+		{
 			Some(srv) => {
-				let target = srv.target().to_ascii();
+				let target = srv.target.to_ascii();
 				let host = target.trim_end_matches('.');
-				Some(format!("{}:{}", host, srv.port()))
+				Some(format!("{}:{}", host, srv.port))
 			}
 			None => None,
 		}
 	}
 
 	/// Get the [`SocketAddr`] of an address
-	pub async fn socket(&self, server: &Server) -> Result<SocketAddr, ResolveError> {
+	pub async fn socket(&self, server: &Server) -> Result<SocketAddr, NetError> {
 		let (host, port) = match *server {
 			Server::Ip(ip) => return Ok(SocketAddr::new(ip, 8448)),
 			Server::Socket(socket) => return Ok(socket),
@@ -230,7 +235,7 @@ impl Resolver {
 		let record = self.resolver.lookup_ip(host).await?;
 		// We naively get the first IP.
 		let socket = SocketAddr::new(
-			record.iter().next().ok_or(ResolveErrorKind::Message("No records"))?,
+			record.iter().next().ok_or(NetError::Message("No records"))?,
 			port,
 		);
 		Ok(socket)
@@ -252,7 +257,7 @@ fn split_port(host: &str) -> Option<(&str, u16)> {
 mod tests {
 	use std::net::{IpAddr, SocketAddr};
 
-	use trust_dns_resolver::TokioAsyncResolver;
+	use hickory_resolver::TokioResolver;
 	use wiremock::{
 		matchers::{method, path},
 		Mock, MockServer, ResponseTemplate,
@@ -291,7 +296,7 @@ mod tests {
 			.resolve("example.test", *mock_server.address())
 			.resolve("destination.test", *mock_server.address())
 			.build()?;
-		let resolver = Resolver::with(client, TokioAsyncResolver::tokio_from_system_conf()?);
+		let resolver = Resolver::with(client, TokioResolver::builder_tokio()?.build()?);
 
 		let addr = mock_server.address();
 

@@ -18,7 +18,9 @@
 	clippy::expect_used
 )]
 
-use http_cache_reqwest::{Cache, CacheMode, CacheOptions, HttpCache, MokaManager};
+use http_cache_reqwest::{
+	Cache, CacheMode, CacheOptions, HttpCache, HttpCacheOptions, MokaManager,
+};
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -31,6 +33,9 @@ pub(crate) fn cache() -> Cache<MokaManager> {
 	Cache(HttpCache {
 		mode: CacheMode::Default,
 		manager: MokaManager::default(),
-		options: Some(CacheOptions { shared: false, ..CacheOptions::default() }),
+		options: HttpCacheOptions {
+			cache_options: Some(CacheOptions { shared: false, ..CacheOptions::default() }),
+			..HttpCacheOptions::default()
+		},
 	})
 }
