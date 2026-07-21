@@ -8,7 +8,8 @@ repository = "https://github.com/famedly/matrix-oracle"
 license = "AGPL-3.0-only"
 keywords = ["matrix"]
 categories = ["api-bindings"]
-edition = "2018"
+edition = "2024"
+rust-version = "1.85"
 resolver = "2"
 
 [features]
